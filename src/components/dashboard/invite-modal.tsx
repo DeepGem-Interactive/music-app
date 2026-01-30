@@ -32,7 +32,12 @@ export function InviteModal({
   ]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [results, setResults] = useState<Array<{ contact: Contact; success: boolean; error?: string }> | null>(null);
+  const [results, setResults] = useState<Array<{
+    invite?: { recipient_name: string };
+    contact?: Contact;
+    success: boolean;
+    error?: string
+  }> | null>(null);
 
   if (!isOpen) return null;
 
@@ -163,7 +168,7 @@ export function InviteModal({
                 </div>
                 <div>
                   <p className={`font-medium ${result.success ? 'text-green-800' : 'text-red-800'}`}>
-                    {result.contact.name}
+                    {result.invite?.recipient_name || result.contact?.name || 'Unknown'}
                   </p>
                   <p className={`text-sm ${result.success ? 'text-green-600' : 'text-red-600'}`}>
                     {result.success ? 'Invitation sent' : result.error}

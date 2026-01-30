@@ -1,12 +1,14 @@
 // Core domain types for Sentimental Song Platform
 
 export type ProjectStatus = 'draft' | 'collecting' | 'curating' | 'generating' | 'completed';
+export type CreationMode = 'collaborative' | 'instant';
 export type InviteStatus = 'pending' | 'sent' | 'opened' | 'submitted' | 'opted_out';
 export type SubmissionMode = 'quick' | 'deep';
 export type SubmissionStatus = 'pending' | 'approved' | 'excluded';
 export type SongVersionStatus = 'generating' | 'completed' | 'failed';
 export type InviteChannel = 'sms' | 'email';
 export type VocalStyle = 'male' | 'female' | 'choir';
+export type MusicInputMode = 'songs' | 'vibe' | 'surprise';
 export type AuditActionType =
   | 'submission_flagged'
   | 'submission_approved'
@@ -19,17 +21,22 @@ export type AuditActionType =
 export interface Project {
   id: string;
   host_user_id: string;
+  creation_mode: CreationMode;
   honoree_name: string;
   honoree_relationship: string;
   occasion: string;
   tone_heartfelt_funny: number; // 1-10
   tone_intimate_anthem: number; // 1-10
   tone_minimal_lyrical: number; // 1-10
-  music_genre_preferences: string[];
+  music_input_mode: MusicInputMode;
+  music_style_references: string | null;
+  music_inferred_style: MusicStyleInference | null;
+  music_genre_preferences: string[]; // Deprecated: for backward compatibility
   music_tempo_preference: string;
   music_vocal_style: VocalStyle;
-  music_instrumental_preferences: string[];
+  music_instrumental_preferences: string[]; // Deprecated: inferred from style
   honoree_photo_url: string | null;
+  honoree_details: HonoreeDetails | null;
   must_include_items: string[];
   topics_to_avoid: string[];
   deadline_timestamp: string;
@@ -79,6 +86,24 @@ export interface DeepModeAnswers {
   current_chapter: string;
   what_matters_most: string;
   voice_note_transcript?: string;
+}
+
+// AI-inferred music style from song/artist references
+export interface MusicStyleInference {
+  genres: string[];
+  mood: string;
+  suggestedInstruments: string[];
+  tempoHint: 'slow' | 'medium' | 'upbeat';
+  styleKeywords: string[];
+}
+
+// Personalization details about the honoree
+export interface HonoreeDetails {
+  bestMemories: string;           // Best memories with this person
+  importantPeople: string;        // Names and relationships of important people in their life
+  physicalDescription: string;    // What they look like
+  energeticDescription: string;   // How you feel when they're around
+  importantEvents: string;        // Key life events
 }
 
 export interface Curation {
@@ -135,19 +160,29 @@ export interface User {
 
 // API request/response types
 export interface CreateProjectRequest {
+  creation_mode?: CreationMode; // defaults to 'collaborative'
   honoree_name: string;
   honoree_relationship: string;
   occasion: string;
   tone_heartfelt_funny: number;
   tone_intimate_anthem: number;
   tone_minimal_lyrical: number;
-  music_genre_preferences: string[];
+  // New music input system
+  music_input_mode: MusicInputMode;
+  music_style_references?: string; // Song/artist names or vibe description
+  music_inferred_style?: MusicStyleInference;
+  // Legacy fields (for backward compatibility)
+  music_genre_preferences?: string[];
   music_tempo_preference: string;
   music_vocal_style: VocalStyle;
-  music_instrumental_preferences: string[];
+  music_instrumental_preferences?: string[];
+  // Personalization
+  honoree_details?: HonoreeDetails;
   must_include_items: string[];
   topics_to_avoid: string[];
   deadline_hours?: number; // defaults to 72
+  // For instant mode - host provides memories directly
+  instant_memories?: QuickModeAnswers;
 }
 
 export interface CreateInvitesRequest {

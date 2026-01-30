@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getJobStatus } from '@/lib/services/fal-music';
 
 export async function GET(
   request: NextRequest,
@@ -58,13 +59,80 @@ export async function GET(
       .single();
 
     // Fetch latest song version
-    const { data: latestVersion } = await supabase
+    let { data: latestVersion } = await supabase
       .from('song_versions')
       .select('*')
       .eq('project_id', projectId)
       .order('version_number', { ascending: false })
       .limit(1)
       .single();
+
+    // If song is generating OR completed without audio, poll fal.ai for status updates
+    const needsAudioFetch = latestVersion?.status === 'generating' ||
+      (latestVersion?.status === 'completed' && !latestVersion?.audio_mp3_url);
+    if (needsAudioFetch) {
+      const jobId = latestVersion.generation_metadata?.job_id;
+      if (jobId) {
+        try {
+          const jobStatus = await getJobStatus(jobId);
+          if (jobStatus) {
+            if (jobStatus.status === 'completed' && jobStatus.audioUrl) {
+              // Update version with the audio URL
+              const { data: updated } = await supabase
+                .from('song_versions')
+                .update({
+                  status: 'completed',
+                  audio_mp3_url: jobStatus.audioUrl,
+                  generation_metadata: {
+                    ...latestVersion.generation_metadata,
+                    completed_at: new Date().toISOString(),
+                  },
+                })
+                .eq('id', latestVersion.id)
+                .select()
+                .single();
+
+              if (updated) latestVersion = updated;
+
+              // Update project status
+              await supabase
+                .from('projects')
+                .update({ status: 'completed' })
+                .eq('id', projectId);
+
+              project.status = 'completed';
+            } else if (jobStatus.status === 'failed') {
+              // Update version with failure
+              const { data: updated } = await supabase
+                .from('song_versions')
+                .update({
+                  status: 'failed',
+                  generation_metadata: {
+                    ...latestVersion.generation_metadata,
+                    failed_at: new Date().toISOString(),
+                    error: jobStatus.error,
+                  },
+                })
+                .eq('id', latestVersion.id)
+                .select()
+                .single();
+
+              if (updated) latestVersion = updated;
+
+              // Revert project status
+              await supabase
+                .from('projects')
+                .update({ status: 'curating' })
+                .eq('id', projectId);
+
+              project.status = 'curating';
+            }
+          }
+        } catch (error) {
+          console.error('Error polling job status:', error);
+        }
+      }
+    }
 
     // Count versions for revision tracking
     const { count: versionCount } = await supabase

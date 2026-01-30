@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { generateSong, buildStylePrompt, generateLyrics } from '@/lib/services/suno';
+import { generateSong, buildStylePrompt, generateLyrics } from '@/lib/services/fal-music';
 
 export async function POST(
   request: NextRequest,
@@ -72,7 +72,7 @@ export async function POST(
     const body = await request.json().catch(() => ({}));
     const iterationFeedback = body.iteration_feedback;
 
-    // Build style prompt
+    // Build style prompt with inferred style if available
     const stylePrompt = buildStylePrompt({
       genres: project.music_genre_preferences || [],
       tempo: project.music_tempo_preference,
@@ -81,6 +81,8 @@ export async function POST(
       toneHeartfeltFunny: project.tone_heartfelt_funny,
       toneIntimateAnthem: project.tone_intimate_anthem,
       toneMinimalLyrical: project.tone_minimal_lyrical,
+      // New: pass inferred style if available
+      inferredStyle: project.music_inferred_style,
     });
 
     // Generate lyrics
@@ -127,6 +129,20 @@ export async function POST(
       lyrics,
       instrumentalTags: project.music_instrumental_preferences,
     });
+
+    // Update song version with job_id for status polling
+    await supabase
+      .from('song_versions')
+      .update({
+        generation_metadata: {
+          job_id: jobId,
+          provider: 'fal-minimax',
+          iteration_feedback: iterationFeedback,
+          submissions_count: submissions?.length || 0,
+          started_at: new Date().toISOString(),
+        },
+      })
+      .eq('id', songVersion.id);
 
     // Update project status
     await supabase

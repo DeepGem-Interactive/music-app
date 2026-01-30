@@ -8,7 +8,12 @@ import { Countdown } from '@/components/ui/countdown';
 import { InviteModal } from '@/components/dashboard/invite-modal';
 import { SubmissionCard } from '@/components/dashboard/submission-card';
 import { GenerationPanel } from '@/components/dashboard/generation-panel';
-import type { ProjectDashboard, Submission } from '@/types';
+import { Zap, Users } from 'lucide-react';
+import type { ProjectDashboard, Submission, CreationMode } from '@/types';
+
+interface ExtendedProjectDashboard extends ProjectDashboard {
+  project: ProjectDashboard['project'] & { creation_mode?: CreationMode };
+}
 
 export default function ProjectDetailPage({
   params,
@@ -17,7 +22,7 @@ export default function ProjectDetailPage({
 }) {
   const resolvedParams = use(params);
   const router = useRouter();
-  const [dashboard, setDashboard] = useState<ProjectDashboard | null>(null);
+  const [dashboard, setDashboard] = useState<ExtendedProjectDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -98,15 +103,24 @@ export default function ProjectDetailPage({
   }
 
   const { project, invites_sent, submissions_received, submissions, revisions_remaining, latest_version } = dashboard;
+  const isInstant = project.creation_mode === 'instant';
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            Song for {project.honoree_name}
-          </h1>
+          <div className="flex items-center gap-2 mb-1">
+            <h1 className="text-2xl font-bold text-gray-900">
+              Song for {project.honoree_name}
+            </h1>
+            {isInstant && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-700 rounded-full">
+                <Zap className="w-3 h-3" />
+                Instant
+              </span>
+            )}
+          </div>
           <p className="text-gray-600">
             {project.occasion} • {project.honoree_relationship}
           </p>
@@ -114,8 +128,8 @@ export default function ProjectDetailPage({
         <StatusBadge status={project.status} />
       </div>
 
-      {/* Countdown */}
-      {project.status === 'collecting' && (
+      {/* Countdown - Only for collaborative projects */}
+      {!isInstant && project.status === 'collecting' && (
         <Card className="bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-100">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
@@ -129,20 +143,38 @@ export default function ProjectDetailPage({
         </Card>
       )}
 
+      {/* Instant Mode Ready Banner */}
+      {isInstant && project.status === 'curating' && !latest_version && (
+        <Card className="bg-gradient-to-r from-green-50 to-emerald-50 border-green-200">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h2 className="font-medium text-gray-900">Ready to Generate</h2>
+              <p className="text-sm text-gray-600">
+                Your memories are ready. Click &quot;Generate Song&quot; to create your personalized song!
+              </p>
+            </div>
+            <Zap className="w-8 h-8 text-green-600" />
+          </div>
+        </Card>
+      )}
+
       {/* Stats */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className={`grid gap-4 ${isInstant ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
+        {!isInstant && (
+          <StatCard
+            label="Invites Sent"
+            value={invites_sent}
+            action={
+              <Button size="sm" onClick={() => setShowInviteModal(true)}>
+                Invite More
+              </Button>
+            }
+          />
+        )}
         <StatCard
-          label="Invites Sent"
-          value={invites_sent}
-          action={
-            <Button size="sm" onClick={() => setShowInviteModal(true)}>
-              Invite More
-            </Button>
-          }
-        />
-        <StatCard
-          label="Submissions"
+          label={isInstant ? 'Memories' : 'Submissions'}
           value={submissions_received}
+          icon={isInstant ? <Zap className="w-5 h-5 text-amber-500" /> : undefined}
         />
         <StatCard
           label="Revisions Remaining"
@@ -155,15 +187,19 @@ export default function ProjectDetailPage({
         {/* Submissions */}
         <div className="lg:col-span-2 space-y-4">
           <CardHeader
-            title="Submissions"
-            description="Review and curate memories from contributors"
+            title={isInstant ? 'Your Memories' : 'Submissions'}
+            description={isInstant ? 'The memories that will be woven into your song' : 'Review and curate memories from contributors'}
           />
           {submissions.length === 0 ? (
             <Card className="text-center py-8">
-              <p className="text-gray-500 mb-4">No submissions yet</p>
-              <Button onClick={() => setShowInviteModal(true)}>
-                Invite Contributors
-              </Button>
+              <p className="text-gray-500 mb-4">
+                {isInstant ? 'No memories found' : 'No submissions yet'}
+              </p>
+              {!isInstant && (
+                <Button onClick={() => setShowInviteModal(true)}>
+                  Invite Contributors
+                </Button>
+              )}
             </Card>
           ) : (
             <div className="space-y-4">
@@ -173,6 +209,7 @@ export default function ProjectDetailPage({
                   submission={submission}
                   onApprove={() => handleApproveSubmission(submission.id)}
                   onExclude={() => handleExcludeSubmission(submission.id)}
+                  readOnly={isInstant}
                 />
               ))}
             </div>
@@ -188,17 +225,20 @@ export default function ProjectDetailPage({
             revisionsRemaining={revisions_remaining}
             submissionsCount={submissions_received}
             onGenerate={fetchDashboard}
+            isInstant={isInstant}
           />
         </div>
       </div>
 
-      {/* Invite Modal */}
-      <InviteModal
-        isOpen={showInviteModal}
-        onClose={() => setShowInviteModal(false)}
-        projectId={project.id}
-        onInvitesSent={fetchDashboard}
-      />
+      {/* Invite Modal - Only for collaborative */}
+      {!isInstant && (
+        <InviteModal
+          isOpen={showInviteModal}
+          onClose={() => setShowInviteModal(false)}
+          projectId={project.id}
+          onInvitesSent={fetchDashboard}
+        />
+      )}
     </div>
   );
 }
@@ -215,7 +255,7 @@ function StatusBadge({ status }: { status: string }) {
   const labels = {
     draft: 'Draft',
     collecting: 'Collecting Memories',
-    curating: 'Curating',
+    curating: 'Ready to Generate',
     generating: 'Generating Song',
     completed: 'Completed',
   };
@@ -235,17 +275,22 @@ function StatCard({
   label,
   value,
   action,
+  icon,
 }: {
   label: string;
   value: number;
   action?: React.ReactNode;
+  icon?: React.ReactNode;
 }) {
   return (
     <Card>
       <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm text-gray-500">{label}</p>
-          <p className="text-2xl font-bold text-gray-900">{value}</p>
+        <div className="flex items-center gap-3">
+          {icon}
+          <div>
+            <p className="text-sm text-gray-500">{label}</p>
+            <p className="text-2xl font-bold text-gray-900">{value}</p>
+          </div>
         </div>
         {action}
       </div>

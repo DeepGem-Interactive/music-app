@@ -18,17 +18,25 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 CREATE TABLE IF NOT EXISTS public.projects (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
   host_user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  creation_mode TEXT DEFAULT 'collaborative' CHECK (creation_mode IN ('collaborative', 'instant')),
   honoree_name TEXT NOT NULL,
   honoree_relationship TEXT NOT NULL,
   occasion TEXT NOT NULL,
   tone_heartfelt_funny INTEGER DEFAULT 5 CHECK (tone_heartfelt_funny >= 1 AND tone_heartfelt_funny <= 10),
   tone_intimate_anthem INTEGER DEFAULT 5 CHECK (tone_intimate_anthem >= 1 AND tone_intimate_anthem <= 10),
   tone_minimal_lyrical INTEGER DEFAULT 5 CHECK (tone_minimal_lyrical >= 1 AND tone_minimal_lyrical <= 10),
+  -- New music input system
+  music_input_mode TEXT DEFAULT 'songs' CHECK (music_input_mode IN ('songs', 'vibe', 'surprise')),
+  music_style_references TEXT,
+  music_inferred_style JSONB,
+  -- Legacy fields (for backward compatibility)
   music_genre_preferences JSONB DEFAULT '[]'::jsonb NOT NULL,
   music_tempo_preference TEXT NOT NULL,
   music_vocal_style TEXT NOT NULL CHECK (music_vocal_style IN ('male', 'female', 'choir')),
   music_instrumental_preferences JSONB DEFAULT '[]'::jsonb NOT NULL,
+  -- Personalization
   honoree_photo_url TEXT,
+  honoree_details JSONB,
   must_include_items JSONB DEFAULT '[]'::jsonb NOT NULL,
   topics_to_avoid JSONB DEFAULT '[]'::jsonb NOT NULL,
   deadline_timestamp TIMESTAMPTZ NOT NULL,

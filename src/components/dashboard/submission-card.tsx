@@ -10,12 +10,14 @@ interface SubmissionCardProps {
   submission: Submission;
   onApprove: () => void;
   onExclude: () => void;
+  readOnly?: boolean;
 }
 
 export function SubmissionCard({
   submission,
   onApprove,
   onExclude,
+  readOnly = false,
 }: SubmissionCardProps) {
   const [expanded, setExpanded] = useState(false);
 
@@ -93,7 +95,7 @@ export function SubmissionCard({
               </div>
             )}
 
-            {submission.status === 'pending' && (
+            {!readOnly && submission.status === 'pending' && (
               <div className="flex gap-2 pt-4 border-t border-gray-100">
                 <Button
                   size="sm"

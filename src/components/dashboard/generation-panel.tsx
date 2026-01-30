@@ -13,6 +13,7 @@ interface GenerationPanelProps {
   revisionsRemaining: number;
   submissionsCount: number;
   onGenerate: () => void;
+  isInstant?: boolean;
 }
 
 export function GenerationPanel({
@@ -22,6 +23,7 @@ export function GenerationPanel({
   revisionsRemaining,
   submissionsCount,
   onGenerate,
+  isInstant = false,
 }: GenerationPanelProps) {
   const [generating, setGenerating] = useState(false);
   const [feedback, setFeedback] = useState('');
@@ -194,12 +196,16 @@ export function GenerationPanel({
         </div>
       ) : (
         <div className="space-y-4">
-          <div className="p-4 bg-gray-50 rounded-lg text-center">
-            <Music className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+          <div className={`p-4 rounded-lg text-center ${isInstant ? 'bg-gradient-to-r from-green-50 to-emerald-50' : 'bg-gray-50'}`}>
+            <Music className={`w-8 h-8 mx-auto mb-2 ${isInstant ? 'text-green-500' : 'text-gray-400'}`} />
             <p className="text-sm text-gray-600">
               {submissionsCount === 0
-                ? 'No submissions yet. Invite contributors to share their memories.'
-                : `${submissionsCount} submission${submissionsCount !== 1 ? 's' : ''} ready`}
+                ? isInstant
+                  ? 'Your memories are ready to be transformed into a song.'
+                  : 'No submissions yet. Invite contributors to share their memories.'
+                : isInstant
+                  ? 'Your memories are ready!'
+                  : `${submissionsCount} submission${submissionsCount !== 1 ? 's' : ''} ready`}
             </p>
           </div>
 
@@ -209,7 +215,7 @@ export function GenerationPanel({
             disabled={!canGenerate}
             className="w-full"
           >
-            Generate Song
+            {isInstant ? 'Generate My Song' : 'Generate Song'}
           </Button>
 
           {!canGenerate && submissionsCount > 0 && (
@@ -224,9 +230,12 @@ export function GenerationPanel({
 }
 
 const ITERATION_OPTIONS = [
-  { value: 'more_minimal', label: 'More minimal' },
-  { value: 'more_upbeat', label: 'More upbeat' },
-  { value: 'more_tearjerker', label: 'More emotional / tearjerker' },
-  { value: 'shorter_chorus', label: 'Shorter chorus' },
-  { value: 'fix_pronunciation', label: 'Fix pronunciation' },
+  { value: 'simpler_chorus', label: 'Make chorus simpler' },
+  { value: 'less_words', label: 'Less words, more space' },
+  { value: 'more_personal', label: 'More personal details' },
+  { value: 'more_instrumental', label: 'More instrumental sections' },
+  { value: 'more_upbeat', label: 'More upbeat energy' },
+  { value: 'more_emotional', label: 'More emotional / tearjerker' },
+  { value: 'fix_pronunciation', label: 'Fix confusing words' },
+  { value: 'shorten_verses', label: 'Shorten verses, repeat chorus' },
 ];

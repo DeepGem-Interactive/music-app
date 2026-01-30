@@ -38,6 +38,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Get user profile for name
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('full_name, email')
+      .eq('id', user.id)
+      .single();
+
     const body = await request.json();
     const validation = createProjectSchema.safeParse(body);
 
@@ -48,22 +55,68 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { deadline_hours, ...projectData } = validation.data;
-    const deadlineTimestamp = getDeadlineFromHours(deadline_hours);
+    const {
+      deadline_hours,
+      instant_memories,
+      creation_mode,
+      // Extract new fields that may not exist in DB yet
+      music_input_mode,
+      music_style_references,
+      music_inferred_style,
+      honoree_details,
+      ...projectData
+    } = validation.data;
+    const isInstant = creation_mode === 'instant';
 
+    // For instant mode, deadline is now (not needed)
+    // For collaborative mode, calculate from hours
+    const deadlineTimestamp = isInstant
+      ? new Date().toISOString()
+      : getDeadlineFromHours(deadline_hours);
+
+    // Build insert data
+    // NOTE: New columns (music_input_mode, music_style_references, music_inferred_style, honoree_details)
+    // are excluded until migration is run. Run: supabase/migrations/002_add_music_input_mode.sql
+    const insertData: Record<string, unknown> = {
+      ...projectData,
+      creation_mode,
+      host_user_id: user.id,
+      deadline_timestamp: deadlineTimestamp,
+      status: isInstant ? 'curating' : 'draft',
+    };
+
+    // Create the project
     const { data: project, error } = await supabase
       .from('projects')
-      .insert({
-        ...projectData,
-        host_user_id: user.id,
-        deadline_timestamp: deadlineTimestamp,
-        status: 'draft',
-      })
+      .insert(insertData)
       .select()
       .single();
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    // For instant mode, create a submission from the host's memories
+    if (isInstant && instant_memories) {
+      const hostName = profile?.full_name || profile?.email || 'Host';
+
+      const { error: submissionError } = await supabase
+        .from('submissions')
+        .insert({
+          project_id: project.id,
+          invite_id: null, // No invite for host submission
+          contributor_name: hostName,
+          submission_mode: 'quick',
+          answers_json: instant_memories,
+          voice_note_urls: [],
+          flags: [],
+          status: 'approved', // Auto-approve host's submission
+        });
+
+      if (submissionError) {
+        console.error('Error creating instant submission:', submissionError);
+        // Don't fail the whole request, project is created
+      }
     }
 
     return NextResponse.json(project, { status: 201 });

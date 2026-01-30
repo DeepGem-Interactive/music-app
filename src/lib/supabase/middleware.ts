@@ -2,6 +2,24 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 export async function updateSession(request: NextRequest) {
+  // Skip Supabase check if credentials aren't configured
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    // Allow public routes without Supabase
+    const publicPaths = ['/', '/login', '/register', '/verify'];
+    const isPublicPath = publicPaths.some(path =>
+      request.nextUrl.pathname === path || request.nextUrl.pathname.startsWith('/contribute')
+    );
+
+    if (isPublicPath) {
+      return NextResponse.next({ request });
+    }
+
+    // Redirect protected routes to home if no Supabase config
+    const url = request.nextUrl.clone();
+    url.pathname = '/';
+    return NextResponse.redirect(url);
+  }
+
   let supabaseResponse = NextResponse.next({
     request,
   });
