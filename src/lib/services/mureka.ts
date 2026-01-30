@@ -3,6 +3,10 @@
 
 const MUREKA_API_BASE = 'https://api.mureka.ai/v1';
 
+// Target song duration in seconds (3.5 minutes = 210 seconds)
+// This ensures we generate full-length songs (3-4 minutes) instead of short clips (90 seconds)
+const TARGET_SONG_DURATION_SECONDS = 210;
+
 interface GenerateSongParams {
   stylePrompt: string;
   lyrics: string;
@@ -59,17 +63,26 @@ export async function generateSong(params: GenerateSongParams): Promise<{ jobId:
   // Build the prompt for Mureka
   const prompt = params.stylePrompt;
 
+  // Request body with duration parameter for 3-4 minute songs
+  // Most music generation APIs support 'duration' or 'length' parameters
+  const requestBody: Record<string, unknown> = {
+    prompt,
+    lyrics: params.lyrics,
+    model: 'auto', // Required field - uses latest model
+    // Duration in seconds - targeting 3-4 minute songs (180-240 seconds)
+    duration: TARGET_SONG_DURATION_SECONDS,
+    // Some APIs use 'extend' or 'clip_duration' instead
+    // If Mureka API uses different parameter names, adjust accordingly
+    extend: true, // Request extended/full-length song
+  };
+
   const response = await fetch(`${MUREKA_API_BASE}/song/generate`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${apiKey}`,
     },
-    body: JSON.stringify({
-      prompt,
-      lyrics: params.lyrics,
-      model: 'auto', // Required field - uses latest model
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   if (!response.ok) {
