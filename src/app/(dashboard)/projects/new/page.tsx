@@ -10,30 +10,27 @@ import { Slider } from '@/components/ui/slider';
 import { Select } from '@/components/ui/select';
 import { TagInput } from '@/components/ui/tag-input';
 import { ProgressSteps } from '@/components/ui/progress-steps';
-import { Clock, Users, Zap } from 'lucide-react';
+import { Clock, Users, Zap, Plus, Trash2 } from 'lucide-react';
 import {
   TEMPO_OPTIONS,
   type CreateProjectInput,
 } from '@/lib/validations/project';
 import type { CreationMode, QuickModeAnswers, MusicInputMode } from '@/types';
 
-const COLLABORATIVE_STEPS = [
+// NEW: Simplified step flow - same for both modes
+const STEPS = [
   { id: 'mode', name: 'Mode' },
-  { id: 'honoree', name: 'Honoree' },
-  { id: 'tone', name: 'Tone' },
+  { id: 'describe', name: 'Describe Person' },
+  { id: 'collaborators', name: 'Collaborators' }, // NEW STEP
   { id: 'music', name: 'Music' },
-  { id: 'guardrails', name: 'Details' },
-  { id: 'review', name: 'Review' },
+  { id: 'details', name: 'Details' },
 ];
 
-const INSTANT_STEPS = [
-  { id: 'mode', name: 'Mode' },
-  { id: 'honoree', name: 'Honoree' },
-  { id: 'tone', name: 'Tone' },
-  { id: 'music', name: 'Music' },
-  { id: 'memories', name: 'Memories' },
-  { id: 'review', name: 'Review' },
-];
+interface Collaborator {
+  name: string;
+  email?: string;
+  phone?: string;
+}
 
 export default function NewProjectPage() {
   const router = useRouter();
@@ -46,6 +43,8 @@ export default function NewProjectPage() {
     honoree_name: '',
     honoree_relationship: '',
     occasion: '',
+    personality_traits: [],
+    favorite_moments: '',
     tone_heartfelt_funny: 5,
     tone_intimate_anthem: 5,
     tone_minimal_lyrical: 5,
@@ -64,10 +63,10 @@ export default function NewProjectPage() {
     topics_to_avoid: [],
     deadline_hours: 72,
     instant_memories: undefined,
+    collaborators: [],
   });
 
   const isInstant = formData.creation_mode === 'instant';
-  const steps = isInstant ? INSTANT_STEPS : COLLABORATIVE_STEPS;
 
   const updateField = <K extends keyof CreateProjectInput>(
     field: K,
@@ -83,11 +82,11 @@ export default function NewProjectPage() {
       // Initialize instant_memories when switching to instant mode
       instant_memories: mode === 'instant' ? { admire: '', memory: '', quirk: '', wish: '' } : undefined,
     }));
-    setCurrentStep(1); // Move to honoree step
+    setCurrentStep(1); // Move to describe person step
   };
 
   const handleNext = () => {
-    setCurrentStep((prev) => Math.min(prev + 1, steps.length - 1));
+    setCurrentStep((prev) => Math.min(prev + 1, STEPS.length - 1));
   };
 
   const handleBack = () => {
@@ -119,38 +118,38 @@ export default function NewProjectPage() {
   };
 
   const canProceed = () => {
-    const stepId = steps[currentStep].id;
+    const stepId = STEPS[currentStep].id;
 
     switch (stepId) {
       case 'mode':
         return false; // Mode selection happens via buttons
-      case 'honoree':
+      case 'describe':
         return (
           formData.honoree_name.trim() !== '' &&
           formData.honoree_relationship.trim() !== '' &&
           formData.occasion.trim() !== ''
         );
-      case 'tone':
-        return true;
+      case 'collaborators':
+        // For instant mode, can skip collaborators
+        // For collaborative mode, should have at least one collaborator
+        return isInstant || (formData.collaborators && formData.collaborators.length > 0);
       case 'music':
-        // Can proceed if:
-        // - surprise mode (no input needed)
-        // - songs/vibe mode with input (inference is optional)
+        // Can proceed if surprise mode or has input
         if (formData.music_input_mode === 'surprise') {
           return true;
         }
-        // Just need some input for songs/vibe modes - inference is optional
         return (formData.music_style_references?.trim() ?? '').length > 0;
-      case 'guardrails':
-        return true;
-      case 'memories':
-        return (
-          formData.instant_memories?.admire.trim() !== '' &&
-          formData.instant_memories?.memory.trim() !== '' &&
-          formData.instant_memories?.quirk.trim() !== '' &&
-          formData.instant_memories?.wish.trim() !== ''
-        );
-      case 'review':
+      case 'details':
+        // For instant mode, need memories
+        // For collaborative mode, just need to fill out details
+        if (isInstant) {
+          return (
+            formData.instant_memories?.admire.trim() !== '' &&
+            formData.instant_memories?.memory.trim() !== '' &&
+            formData.instant_memories?.quirk.trim() !== '' &&
+            formData.instant_memories?.wish.trim() !== ''
+          );
+        }
         return true;
       default:
         return false;
@@ -158,23 +157,19 @@ export default function NewProjectPage() {
   };
 
   const renderStep = () => {
-    const stepId = steps[currentStep].id;
+    const stepId = STEPS[currentStep].id;
 
     switch (stepId) {
       case 'mode':
         return <ModeSelectionStep onSelect={handleModeSelect} />;
-      case 'honoree':
-        return <HonoreeStep formData={formData} updateField={updateField} />;
-      case 'tone':
-        return <ToneStep formData={formData} updateField={updateField} />;
+      case 'describe':
+        return <DescribePersonStep formData={formData} updateField={updateField} />;
+      case 'collaborators':
+        return <CollaboratorsStep formData={formData} updateField={updateField} isInstant={isInstant} />;
       case 'music':
         return <MusicStep formData={formData} updateField={updateField} />;
-      case 'guardrails':
-        return <GuardrailsStep formData={formData} updateField={updateField} />;
-      case 'memories':
-        return <MemoriesStep formData={formData} updateField={updateField} />;
-      case 'review':
-        return <ReviewStep formData={formData} isInstant={isInstant} />;
+      case 'details':
+        return <DetailsStep formData={formData} updateField={updateField} isInstant={isInstant} />;
       default:
         return null;
     }
@@ -189,13 +184,13 @@ export default function NewProjectPage() {
         <p className="text-gray-600">
           {isInstant
             ? 'Create a personalized song in minutes with your own memories.'
-            : 'Collect memories from friends and family to create a personalized song.'}
+            : 'Invite collaborators to share memories and create a beautiful song together.'}
         </p>
       </div>
 
       <div className="mb-8">
         <ProgressSteps
-          steps={steps}
+          steps={STEPS}
           currentStep={currentStep}
           onStepClick={(step) => step < currentStep && setCurrentStep(step)}
         />
@@ -210,7 +205,7 @@ export default function NewProjectPage() {
 
         {renderStep()}
 
-        {steps[currentStep].id !== 'mode' && (
+        {STEPS[currentStep].id !== 'mode' && (
           <div className="flex justify-between mt-8 pt-6 border-t border-gray-200">
             <Button
               variant="outline"
@@ -220,13 +215,13 @@ export default function NewProjectPage() {
               Back
             </Button>
 
-            {currentStep < steps.length - 1 ? (
+            {currentStep < STEPS.length - 1 ? (
               <Button onClick={handleNext} disabled={!canProceed()}>
                 Continue
               </Button>
             ) : (
               <Button onClick={handleSubmit} loading={loading} disabled={!canProceed()}>
-                {isInstant ? 'Create & Generate Song' : 'Create Project'}
+                {isInstant ? 'Create & Generate Song' : 'Create Project & Send Invites'}
               </Button>
             )}
           </div>
@@ -290,11 +285,12 @@ interface StepProps {
   ) => void;
 }
 
-function HonoreeStep({ formData, updateField }: StepProps) {
+// NEW: Step 1 - Describe Person (combines honoree info + personality traits + favorite moments)
+function DescribePersonStep({ formData, updateField }: StepProps) {
   return (
     <div className="space-y-6">
       <h2 className="text-lg font-semibold text-gray-900">
-        Who is this song for?
+        Tell us about the person
       </h2>
 
       <Input
@@ -319,68 +315,192 @@ function HonoreeStep({ formData, updateField }: StepProps) {
         maxLength={200}
         showCount
       />
+
+      <TagInput
+        label="Personality traits (optional)"
+        tags={formData.personality_traits || []}
+        onChange={(tags) => updateField('personality_traits', tags)}
+        placeholder="Type a trait and press Enter"
+        helperText="e.g., kind, funny, adventurous, patient, wise"
+      />
+
+      <Textarea
+        label="Favorite moments together (optional)"
+        value={formData.favorite_moments || ''}
+        onChange={(e) => updateField('favorite_moments', e.target.value)}
+        placeholder="Share your favorite memories or moments with this person..."
+        maxLength={1000}
+        showCount
+        rows={4}
+      />
     </div>
   );
 }
 
-function ToneStep({ formData, updateField }: StepProps) {
-  return (
-    <div className="space-y-8">
-      <h2 className="text-lg font-semibold text-gray-900">
-        Set the tone for the song
-      </h2>
+// NEW: Step 2 - Collaborators
+function CollaboratorsStep({ formData, updateField, isInstant }: StepProps & { isInstant: boolean }) {
+  const collaborators = formData.collaborators || [];
 
-      <Slider
-        label="Emotional tone"
-        leftLabel="Heartfelt"
-        rightLabel="Funny"
-        value={formData.tone_heartfelt_funny}
-        onChange={(value) => updateField('tone_heartfelt_funny', value)}
-      />
+  const addCollaborator = () => {
+    updateField('collaborators', [...collaborators, { name: '', email: '', phone: '' }]);
+  };
 
-      <Slider
-        label="Song style"
-        leftLabel="Intimate"
-        rightLabel="Big Anthem"
-        value={formData.tone_intimate_anthem}
-        onChange={(value) => updateField('tone_intimate_anthem', value)}
-      />
+  const removeCollaborator = (index: number) => {
+    updateField('collaborators', collaborators.filter((_, i) => i !== index));
+  };
 
-      <Slider
-        label="Lyric density"
-        leftLabel="Minimal"
-        rightLabel="Lyrical"
-        value={formData.tone_minimal_lyrical}
-        onChange={(value) => updateField('tone_minimal_lyrical', value)}
-      />
+  const updateCollaborator = (index: number, field: keyof Collaborator, value: string) => {
+    const updated = [...collaborators];
+    updated[index] = { ...updated[index], [field]: value };
+    updateField('collaborators', updated);
+  };
 
-      <div className="p-4 bg-gray-50 rounded-lg">
-        <p className="text-sm text-gray-600">
-          <strong>Preview:</strong> Your song will be{' '}
-          {formData.tone_heartfelt_funny <= 3
-            ? 'heartfelt and sincere'
-            : formData.tone_heartfelt_funny >= 7
-            ? 'playful and fun'
-            : 'balanced'}
-          ,{' '}
-          {formData.tone_intimate_anthem <= 3
-            ? 'intimate and personal'
-            : formData.tone_intimate_anthem >= 7
-            ? 'anthemic and powerful'
-            : 'moderately energetic'}
-          , with{' '}
-          {formData.tone_minimal_lyrical <= 3
-            ? 'minimal, impactful lyrics'
-            : formData.tone_minimal_lyrical >= 7
-            ? 'rich, detailed lyrics'
-            : 'balanced lyrics'}
-          .
-        </p>
+  if (isInstant) {
+    return (
+      <div className="space-y-6">
+        <h2 className="text-lg font-semibold text-gray-900">
+          Add collaborators (optional)
+        </h2>
+        <div className="p-4 bg-blue-50 border border-blue-100 rounded-lg">
+          <p className="text-sm text-blue-800">
+            Since you&apos;re creating an instant song, you can skip this step. 
+            Or add collaborators if you&apos;d like to invite others to contribute later.
+          </p>
+        </div>
+        
+        {collaborators.length === 0 ? (
+          <Button onClick={addCollaborator} variant="outline" className="w-full">
+            <Plus className="w-4 h-4 mr-2" />
+            Add a collaborator (optional)
+          </Button>
+        ) : (
+          <div className="space-y-4">
+            {collaborators.map((collab, index) => (
+              <CollaboratorForm
+                key={index}
+                collaborator={collab}
+                index={index}
+                onUpdate={updateCollaborator}
+                onRemove={removeCollaborator}
+              />
+            ))}
+            <Button onClick={addCollaborator} variant="outline" className="w-full">
+              <Plus className="w-4 h-4 mr-2" />
+              Add another collaborator
+            </Button>
+          </div>
+        )}
       </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-lg font-semibold text-gray-900">
+        Who would you like to invite?
+      </h2>
+      <p className="text-sm text-gray-600">
+        Add friends and family who can share their memories. We&apos;ll send them an invitation to contribute.
+      </p>
+
+      {collaborators.length === 0 ? (
+        <div className="text-center py-8">
+          <Users className="w-12 h-12 mx-auto text-gray-400 mb-4" />
+          <p className="text-gray-500 mb-4">No collaborators added yet</p>
+          <Button onClick={addCollaborator}>
+            <Plus className="w-4 h-4 mr-2" />
+            Add first collaborator
+          </Button>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {collaborators.map((collab, index) => (
+            <CollaboratorForm
+              key={index}
+              collaborator={collab}
+              index={index}
+              onUpdate={updateCollaborator}
+              onRemove={removeCollaborator}
+            />
+          ))}
+          <Button onClick={addCollaborator} variant="outline" className="w-full">
+            <Plus className="w-4 h-4 mr-2" />
+            Add another collaborator
+          </Button>
+        </div>
+      )}
+
+      <Select
+        label="Collection deadline"
+        value={formData.deadline_hours.toString()}
+        onChange={(e) => updateField('deadline_hours', parseInt(e.target.value))}
+        options={[
+          { value: '24', label: '24 hours' },
+          { value: '48', label: '48 hours' },
+          { value: '72', label: '72 hours (recommended)' },
+          { value: '96', label: '4 days' },
+          { value: '120', label: '5 days' },
+          { value: '168', label: '1 week' },
+        ]}
+        helperText="How long contributors have to submit their memories"
+      />
     </div>
   );
 }
 
+function CollaboratorForm({
+  collaborator,
+  index,
+  onUpdate,
+  onRemove,
+}: {
+  collaborator: Collaborator;
+  index: number;
+  onUpdate: (index: number, field: keyof Collaborator, value: string) => void;
+  onRemove: (index: number) => void;
+}) {
+  return (
+    <Card className="p-4">
+      <div className="flex gap-4">
+        <div className="flex-1 space-y-3">
+          <Input
+            label={`Collaborator ${index + 1} name`}
+            value={collaborator.name}
+            onChange={(e) => onUpdate(index, 'name', e.target.value)}
+            placeholder="e.g., John Smith"
+          />
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Email"
+              type="email"
+              value={collaborator.email || ''}
+              onChange={(e) => onUpdate(index, 'email', e.target.value)}
+              placeholder="john@example.com"
+            />
+            <Input
+              label="Phone (optional)"
+              type="tel"
+              value={collaborator.phone || ''}
+              onChange={(e) => onUpdate(index, 'phone', e.target.value)}
+              placeholder="+1 234 567 8900"
+            />
+          </div>
+        </div>
+        <div className="flex items-start pt-6">
+          <button
+            onClick={() => onRemove(index)}
+            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+            type="button"
+          >
+            <Trash2 className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+// Step 3: Music Preferences
 function MusicStep({ formData, updateField }: StepProps) {
   const [inferring, setInferring] = useState(false);
   const [inferError, setInferError] = useState('');
@@ -588,49 +708,140 @@ function MusicStep({ formData, updateField }: StepProps) {
         </div>
       )}
 
-      {/* Tempo Selection - Always Show */}
-      <Select
-        label="Tempo"
-        value={formData.music_tempo_preference}
-        onChange={(e) => updateField('music_tempo_preference', e.target.value)}
-        options={TEMPO_OPTIONS.map((t) => ({ value: t.value, label: t.label }))}
-      />
+      {/* Tempo & Vocal Style - Always Show */}
+      <div className="grid grid-cols-2 gap-4">
+        <Select
+          label="Tempo"
+          value={formData.music_tempo_preference}
+          onChange={(e) => updateField('music_tempo_preference', e.target.value)}
+          options={TEMPO_OPTIONS.map((t) => ({ value: t.value, label: t.label }))}
+        />
 
-      {/* Vocal Style - Always Show */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Vocal style
-        </label>
-        <div className="flex gap-4">
-          {(['male', 'female', 'choir'] as const).map((style) => (
-            <label
-              key={style}
-              className={`flex-1 p-4 border rounded-lg cursor-pointer text-center transition-colors ${
-                formData.music_vocal_style === style
-                  ? 'border-indigo-500 bg-indigo-50'
-                  : 'border-gray-200 hover:border-gray-300'
-              }`}
-            >
-              <input
-                type="radio"
-                name="vocal_style"
-                value={style}
-                checked={formData.music_vocal_style === style}
-                onChange={(e) =>
-                  updateField('music_vocal_style', e.target.value as typeof style)
-                }
-                className="sr-only"
-              />
-              <span className="capitalize">{style}</span>
-            </label>
-          ))}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Vocal style
+          </label>
+          <div className="flex gap-2">
+            {(['male', 'female', 'choir'] as const).map((style) => (
+              <label
+                key={style}
+                className={`flex-1 p-3 border rounded-lg cursor-pointer text-center transition-colors text-sm ${
+                  formData.music_vocal_style === style
+                    ? 'border-indigo-500 bg-indigo-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="vocal_style"
+                  value={style}
+                  checked={formData.music_vocal_style === style}
+                  onChange={(e) =>
+                    updateField('music_vocal_style', e.target.value as typeof style)
+                  }
+                  className="sr-only"
+                />
+                <span className="capitalize">{style}</span>
+              </label>
+            ))}
+          </div>
         </div>
+      </div>
+
+      {/* Tone Sliders */}
+      <div className="space-y-6 pt-4">
+        <h3 className="font-medium text-gray-900">Set the tone</h3>
+        
+        <Slider
+          label="Emotional tone"
+          leftLabel="Heartfelt"
+          rightLabel="Funny"
+          value={formData.tone_heartfelt_funny}
+          onChange={(value) => updateField('tone_heartfelt_funny', value)}
+        />
+
+        <Slider
+          label="Song style"
+          leftLabel="Intimate"
+          rightLabel="Big Anthem"
+          value={formData.tone_intimate_anthem}
+          onChange={(value) => updateField('tone_intimate_anthem', value)}
+        />
+
+        <Slider
+          label="Lyric density"
+          leftLabel="Minimal"
+          rightLabel="Lyrical"
+          value={formData.tone_minimal_lyrical}
+          onChange={(value) => updateField('tone_minimal_lyrical', value)}
+        />
       </div>
     </div>
   );
 }
 
-function GuardrailsStep({ formData, updateField }: StepProps) {
+// Step 4: Details (memories for instant mode, or additional details for collaborative)
+function DetailsStep({ formData, updateField, isInstant }: StepProps & { isInstant: boolean }) {
+  if (isInstant) {
+    const memories = formData.instant_memories || { admire: '', memory: '', quirk: '', wish: '' };
+
+    const updateMemory = (field: keyof QuickModeAnswers, value: string) => {
+      updateField('instant_memories', { ...memories, [field]: value });
+    };
+
+    return (
+      <div className="space-y-6">
+        <h2 className="text-lg font-semibold text-gray-900">
+          Share your memories of {formData.honoree_name || 'them'}
+        </h2>
+        <p className="text-gray-600 text-sm">
+          These answers will be woven into the song lyrics. Be specific and personal!
+        </p>
+
+        <Textarea
+          label={`What do you admire most about ${formData.honoree_name || 'them'}?`}
+          value={memories.admire}
+          onChange={(e) => updateMemory('admire', e.target.value)}
+          placeholder="e.g., Their endless patience and how they always know the right thing to say"
+          maxLength={500}
+          showCount
+          rows={3}
+        />
+
+        <Textarea
+          label="Share a favorite memory together"
+          value={memories.memory}
+          onChange={(e) => updateMemory('memory', e.target.value)}
+          placeholder="e.g., That summer road trip when we got lost and ended up finding the best diner"
+          maxLength={500}
+          showCount
+          rows={3}
+        />
+
+        <Textarea
+          label="What unique trait or quirk makes them special?"
+          value={memories.quirk}
+          onChange={(e) => updateMemory('quirk', e.target.value)}
+          placeholder="e.g., They always hum while cooking and can never remember where they put their keys"
+          maxLength={500}
+          showCount
+          rows={3}
+        />
+
+        <Textarea
+          label={`What do you wish for ${formData.honoree_name || 'them'}?`}
+          value={memories.wish}
+          onChange={(e) => updateMemory('wish', e.target.value)}
+          placeholder="e.g., That they find peace and keep spreading joy wherever they go"
+          maxLength={500}
+          showCount
+          rows={3}
+        />
+      </div>
+    );
+  }
+
+  // Collaborative mode - additional details
   return (
     <div className="space-y-6">
       <h2 className="text-lg font-semibold text-gray-900">
@@ -653,186 +864,14 @@ function GuardrailsStep({ formData, updateField }: StepProps) {
         helperText="e.g., sensitive topics, family issues"
       />
 
-      <Select
-        label="Collection deadline"
-        value={formData.deadline_hours.toString()}
-        onChange={(e) => updateField('deadline_hours', parseInt(e.target.value))}
-        options={[
-          { value: '24', label: '24 hours' },
-          { value: '48', label: '48 hours' },
-          { value: '72', label: '72 hours (recommended)' },
-          { value: '96', label: '4 days' },
-          { value: '120', label: '5 days' },
-          { value: '168', label: '1 week' },
-        ]}
-        helperText="How long contributors have to submit their memories"
-      />
-    </div>
-  );
-}
-
-function MemoriesStep({ formData, updateField }: StepProps) {
-  const memories = formData.instant_memories || { admire: '', memory: '', quirk: '', wish: '' };
-
-  const updateMemory = (field: keyof QuickModeAnswers, value: string) => {
-    updateField('instant_memories', { ...memories, [field]: value });
-  };
-
-  return (
-    <div className="space-y-6">
-      <h2 className="text-lg font-semibold text-gray-900">
-        Share your memories of {formData.honoree_name || 'them'}
-      </h2>
-      <p className="text-gray-600 text-sm">
-        These answers will be woven into the song lyrics. Be specific and personal!
-      </p>
-
-      <Textarea
-        label={`What do you admire most about ${formData.honoree_name || 'them'}?`}
-        value={memories.admire}
-        onChange={(e) => updateMemory('admire', e.target.value)}
-        placeholder="e.g., Their endless patience and how they always know the right thing to say"
-        maxLength={500}
-        showCount
-        rows={3}
-      />
-
-      <Textarea
-        label="Share a favorite memory together"
-        value={memories.memory}
-        onChange={(e) => updateMemory('memory', e.target.value)}
-        placeholder="e.g., That summer road trip when we got lost and ended up finding the best diner"
-        maxLength={500}
-        showCount
-        rows={3}
-      />
-
-      <Textarea
-        label="What unique trait or quirk makes them special?"
-        value={memories.quirk}
-        onChange={(e) => updateMemory('quirk', e.target.value)}
-        placeholder="e.g., They always hum while cooking and can never remember where they put their keys"
-        maxLength={500}
-        showCount
-        rows={3}
-      />
-
-      <Textarea
-        label={`What do you wish for ${formData.honoree_name || 'them'}?`}
-        value={memories.wish}
-        onChange={(e) => updateMemory('wish', e.target.value)}
-        placeholder="e.g., That they find peace and keep spreading joy wherever they go"
-        maxLength={500}
-        showCount
-        rows={3}
-      />
-    </div>
-  );
-}
-
-function ReviewStep({ formData, isInstant }: { formData: CreateProjectInput; isInstant: boolean }) {
-  return (
-    <div className="space-y-6">
-      <h2 className="text-lg font-semibold text-gray-900">
-        Review your project
-      </h2>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <ReviewItem label="Honoree" value={formData.honoree_name} />
-        <ReviewItem label="Relationship" value={formData.honoree_relationship} />
-        <ReviewItem label="Occasion" value={formData.occasion} />
-        <ReviewItem
-          label="Mode"
-          value={isInstant ? 'Instant' : 'Collaborative'}
-        />
-        {!isInstant && (
-          <ReviewItem
-            label="Deadline"
-            value={`${formData.deadline_hours} hours`}
-          />
-        )}
-        <ReviewItem
-          label="Music Style"
-          value={
-            formData.music_input_mode === 'surprise'
-              ? 'Surprise me!'
-              : formData.music_inferred_style?.genres.join(', ') || 'Not specified'
-          }
-        />
-        <ReviewItem
-          label="Tempo"
-          value={
-            TEMPO_OPTIONS.find((t) => t.value === formData.music_tempo_preference)
-              ?.label || formData.music_tempo_preference
-          }
-        />
-        <ReviewItem
-          label="Vocal Style"
-          value={formData.music_vocal_style}
-        />
-        {formData.must_include_items.length > 0 && (
-          <ReviewItem
-            label="Must Include"
-            value={formData.must_include_items.join(', ')}
-          />
-        )}
-        {formData.topics_to_avoid.length > 0 && (
-          <ReviewItem
-            label="Topics to Avoid"
-            value={formData.topics_to_avoid.join(', ')}
-          />
-        )}
-      </div>
-
-      {isInstant && formData.instant_memories && (
-        <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-          <h3 className="font-medium text-gray-900 mb-3">Your Memories</h3>
-          <div className="space-y-3 text-sm">
-            <div>
-              <span className="text-gray-500">What you admire:</span>
-              <p className="text-gray-700">{formData.instant_memories.admire}</p>
-            </div>
-            <div>
-              <span className="text-gray-500">Favorite memory:</span>
-              <p className="text-gray-700">{formData.instant_memories.memory}</p>
-            </div>
-            <div>
-              <span className="text-gray-500">Unique trait:</span>
-              <p className="text-gray-700">{formData.instant_memories.quirk}</p>
-            </div>
-            <div>
-              <span className="text-gray-500">Your wish:</span>
-              <p className="text-gray-700">{formData.instant_memories.wish}</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className={`p-4 rounded-lg border ${isInstant ? 'bg-green-50 border-green-100' : 'bg-indigo-50 border-indigo-100'}`}>
-        <p className={`text-sm ${isInstant ? 'text-green-800' : 'text-indigo-800'}`}>
-          {isInstant ? (
-            <>
-              Your song will start generating immediately after you click
-              &quot;Create &amp; Generate Song&quot;. Generation typically takes about 45 seconds.
-            </>
-          ) : (
-            <>
-              After creating this project, you&apos;ll be able to invite friends and
-              family to share their memories. The song will be generated once you
-              review and curate the submissions.
-            </>
-          )}
+      <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-lg">
+        <h3 className="font-medium text-gray-900 mb-2">What happens next?</h3>
+        <p className="text-sm text-indigo-800">
+          After you create this project, we&apos;ll send invitations to your collaborators. 
+          They&apos;ll have {formData.deadline_hours} hours to share their memories. 
+          Once submissions are in, you&apos;ll review and curate them before generating the song.
         </p>
       </div>
-    </div>
-  );
-}
-
-function ReviewItem({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="p-3 bg-gray-50 rounded-lg">
-      <dt className="text-xs font-medium text-gray-500 uppercase">{label}</dt>
-      <dd className="mt-1 text-sm text-gray-900 capitalize">{value}</dd>
     </div>
   );
 }

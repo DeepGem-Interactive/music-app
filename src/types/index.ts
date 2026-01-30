@@ -25,6 +25,8 @@ export interface Project {
   honoree_name: string;
   honoree_relationship: string;
   occasion: string;
+  personality_traits: string[]; // NEW: Personality traits describing the honoree
+  favorite_moments: string | null; // NEW: Free-form text describing favorite moments
   tone_heartfelt_funny: number; // 1-10
   tone_intimate_anthem: number; // 1-10
   tone_minimal_lyrical: number; // 1-10
@@ -164,6 +166,8 @@ export interface CreateProjectRequest {
   honoree_name: string;
   honoree_relationship: string;
   occasion: string;
+  personality_traits?: string[]; // NEW: Personality traits describing the honoree
+  favorite_moments?: string; // NEW: Free-form text describing favorite moments
   tone_heartfelt_funny: number;
   tone_intimate_anthem: number;
   tone_minimal_lyrical: number;
@@ -183,6 +187,12 @@ export interface CreateProjectRequest {
   deadline_hours?: number; // defaults to 72
   // For instant mode - host provides memories directly
   instant_memories?: QuickModeAnswers;
+  // For collaborative mode - list of collaborators to invite
+  collaborators?: Array<{
+    name: string;
+    email?: string;
+    phone?: string;
+  }>;
 }
 
 export interface CreateInvitesRequest {

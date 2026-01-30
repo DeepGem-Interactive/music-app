@@ -30,12 +30,26 @@ export const honoreeDetailsSchema = z.object({
   importantEvents: z.string().max(1000).default(''),
 });
 
+// Schema for collaborator invites
+export const collaboratorSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  email: z.string().email('Invalid email').optional(),
+  phone: z.string().optional(),
+}).refine(
+  (data) => data.email || data.phone,
+  {
+    message: 'Either email or phone is required',
+  }
+);
+
 // Base schema without refinements (for .partial())
 const baseProjectSchema = z.object({
   creation_mode: creationModeSchema.default('collaborative'),
   honoree_name: z.string().min(1, 'Honoree name is required').max(100),
   honoree_relationship: z.string().min(1, 'Relationship is required').max(100),
   occasion: z.string().min(1, 'Occasion is required').max(200),
+  personality_traits: z.array(z.string()).default([]), // NEW: Personality traits
+  favorite_moments: z.string().max(1000).optional(), // NEW: Favorite moments
   tone_heartfelt_funny: z.number().min(1).max(10).default(5),
   tone_intimate_anthem: z.number().min(1).max(10).default(5),
   tone_minimal_lyrical: z.number().min(1).max(10).default(5),
@@ -55,6 +69,8 @@ const baseProjectSchema = z.object({
   deadline_hours: z.number().min(24).max(168).default(72),
   // For instant mode - host provides memories directly
   instant_memories: instantMemoriesSchema.optional(),
+  // For collaborative mode - list of collaborators to invite
+  collaborators: z.array(collaboratorSchema).optional(),
 });
 
 // Full create schema with refinement for instant mode validation
