@@ -1,8 +1,36 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Warm, intimate color palette */
+  --background: #fdfbf7; /* Warm off-white */
+  --foreground: #3d2f2f; /* Warm dark brown */
+  
+  /* Primary warm tones */
+  --color-primary: #d97757; /* Warm terracotta */
+  --color-primary-light: #f4a582; /* Light coral */
+  --color-primary-dark: #b85c3a; /* Deep terracotta */
+  
+  /* Accent warm tones */
+  --color-accent: #e8b87d; /* Warm gold */
+  --color-accent-light: #f5d5a8; /* Soft cream */
+  --color-accent-dark: #c99a5e; /* Deep gold */
+  
+  /* Neutral warm tones */
+  --color-neutral-50: #faf8f5;
+  --color-neutral-100: #f5f0eb;
+  --color-neutral-200: #e8dfd5;
+  --color-neutral-300: #d4c4b0;
+  --color-neutral-400: #b5a08a;
+  --color-neutral-500: #8c7a68;
+  --color-neutral-600: #6b5a4d;
+  --color-neutral-700: #4f4039;
+  --color-neutral-800: #3d2f2f;
+  --color-neutral-900: #2a1f1f;
+  
+  /* Success, warning, error with warm tones */
+  --color-success: #7a9e7e; /* Warm sage green */
+  --color-warning: #e8b87d; /* Warm amber */
+  --color-error: #d97757; /* Warm red */
 }
 
 @theme inline {
@@ -10,11 +38,81 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  
+  /* Override default colors with warm palette */
+  --color-gray-50: var(--color-neutral-50);
+  --color-gray-100: var(--color-neutral-100);
+  --color-gray-200: var(--color-neutral-200);
+  --color-gray-300: var(--color-neutral-300);
+  --color-gray-400: var(--color-neutral-400);
+  --color-gray-500: var(--color-neutral-500);
+  --color-gray-600: var(--color-neutral-600);
+  --color-gray-700: var(--color-neutral-700);
+  --color-gray-800: var(--color-neutral-800);
+  --color-gray-900: var(--color-neutral-900);
+  
+  /* Primary color overrides - use terracotta instead of blue/indigo */
+  --color-indigo-50: #fdf3ef;
+  --color-indigo-100: #fbe5dd;
+  --color-indigo-200: #f7caba;
+  --color-indigo-300: #f0a890;
+  --color-indigo-400: #e68565;
+  --color-indigo-500: var(--color-primary);
+  --color-indigo-600: var(--color-primary-dark);
+  --color-indigo-700: #9a4a2e;
+  --color-indigo-800: #7a3b25;
+  --color-indigo-900: #5e2e1d;
 }
 
 /* Force light mode - dark mode not supported yet */
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-feature-settings: 'kern' 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Enhanced typography for warmth */
+h1, h2, h3, h4, h5, h6 {
+  color: var(--foreground);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+/* Soft shadows for depth */
+.card-shadow {
+  box-shadow: 0 2px 8px rgba(61, 47, 47, 0.08), 0 1px 3px rgba(61, 47, 47, 0.06);
+}
+
+.card-shadow-hover {
+  box-shadow: 0 4px 16px rgba(61, 47, 47, 0.12), 0 2px 6px rgba(61, 47, 47, 0.08);
+}
+
+/* Smooth transitions for interactions */
+* {
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Increase border radius for warmth */
+.rounded-default {
+  border-radius: 12px;
+}
+
+.rounded-button {
+  border-radius: 10px;
+}
+
+/* Warm focus states */
+*:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Warm selection color */
+::selection {
+  background-color: var(--color-accent-light);
+  color: var(--foreground);
 }
