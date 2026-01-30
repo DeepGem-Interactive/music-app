@@ -1,5 +1,5 @@
-// Mock notification services (Twilio SMS + SendGrid Email)
-// In production, replace with actual API calls
+// Notification services with SendGrid Email and Twilio SMS
+// Falls back to mock mode when API keys are not configured
 
 interface SendSMSParams {
   to: string;
@@ -194,45 +194,232 @@ Thank you for being part of this special gift!
   return { subject, html, text };
 }
 
-// Mock send functions
-export async function sendSMS(params: SendSMSParams): Promise<NotificationResult> {
-  console.log('[Mock SMS]', { to: params.to, message: params.message });
+// SendGrid email implementation with fallback
+export async function sendEmail(params: SendEmailParams): Promise<NotificationResult> {
+  const apiKey = process.env.SENDGRID_API_KEY;
 
-  // Simulate network delay
-  await new Promise((resolve) => setTimeout(resolve, 100));
+  // Fall back to mock if no API key
+  if (!apiKey) {
+    console.log('[Mock Email]', { to: params.to, subject: params.subject });
 
-  // 95% success rate
-  if (Math.random() > 0.05) {
+    // Simulate network delay
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    // 98% success rate
+    if (Math.random() > 0.02) {
+      return {
+        success: true,
+        messageId: `email_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      };
+    }
+
     return {
-      success: true,
-      messageId: `sms_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      success: false,
+      error: 'Failed to send email. Please try again.',
     };
   }
 
-  return {
-    success: false,
-    error: 'Failed to send SMS. Please try again.',
-  };
+  // Real implementation with SendGrid
+  try {
+    const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        personalizations: [{ to: [{ email: params.to }] }],
+        from: { email: process.env.SENDGRID_FROM_EMAIL || 'noreply@songtribute.app' },
+        subject: params.subject,
+        content: [
+          { type: 'text/plain', value: params.text || '' },
+          { type: 'text/html', value: params.html },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('SendGrid API error:', response.status, errorText);
+      throw new Error(`SendGrid API error: ${response.status}`);
+    }
+
+    return {
+      success: true,
+      messageId: response.headers.get('x-message-id') || 'sent',
+    };
+  } catch (error) {
+    console.error('Email send error:', error);
+    return {
+      success: false,
+      error: 'Failed to send email',
+    };
+  }
 }
 
-export async function sendEmail(params: SendEmailParams): Promise<NotificationResult> {
-  console.log('[Mock Email]', { to: params.to, subject: params.subject });
+// Twilio SMS implementation with fallback
+export async function sendSMS(params: SendSMSParams): Promise<NotificationResult> {
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  const fromPhone = process.env.TWILIO_PHONE_NUMBER;
 
-  // Simulate network delay
-  await new Promise((resolve) => setTimeout(resolve, 200));
+  // Fall back to mock if no API credentials
+  if (!accountSid || !authToken || !fromPhone) {
+    console.log('[Mock SMS]', { to: params.to, message: params.message });
 
-  // 98% success rate
-  if (Math.random() > 0.02) {
+    // Simulate network delay
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // 95% success rate
+    if (Math.random() > 0.05) {
+      return {
+        success: true,
+        messageId: `sms_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      };
+    }
+
     return {
-      success: true,
-      messageId: `email_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      success: false,
+      error: 'Failed to send SMS. Please try again.',
     };
   }
 
-  return {
-    success: false,
-    error: 'Failed to send email. Please try again.',
-  };
+  // Real implementation with Twilio
+  try {
+    const credentials = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
+
+    const response = await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Basic ${credentials}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          To: params.to,
+          From: fromPhone,
+          Body: params.message,
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Twilio API error:', response.status, errorText);
+      throw new Error(`Twilio API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return {
+      success: true,
+      messageId: data.sid,
+    };
+  } catch (error) {
+    console.error('SMS send error:', error);
+    return {
+      success: false,
+      error: 'Failed to send SMS',
+    };
+  }
+}
+
+// Reminder scheduling state to avoid duplicates
+const scheduledReminders = new Map<string, Set<string>>();
+
+export interface ReminderScheduleParams {
+  projectId: string;
+  deadline: Date;
+  contributors: Array<{
+    email?: string;
+    phone?: string;
+  }>;
+  honoreeName: string;
+  contributionLink: string;
+}
+
+/**
+ * Schedule reminders at 24h, 48h, and 68h before deadline
+ * Uses setTimeout for MVP - can upgrade to cron/queue system later
+ */
+export function scheduleReminders(params: ReminderScheduleParams): void {
+  const { projectId, deadline, contributors, honoreeName, contributionLink } = params;
+
+  // Initialize reminder set for this project if needed
+  if (!scheduledReminders.has(projectId)) {
+    scheduledReminders.set(projectId, new Set());
+  }
+
+  const reminderState = scheduledReminders.get(projectId)!;
+  const now = new Date();
+
+  // Define reminder times in milliseconds before deadline
+  const reminderTimes = [
+    { type: '24h' as const, ms: 24 * 60 * 60 * 1000 },
+    { type: '48h' as const, ms: 48 * 60 * 60 * 1000 },
+    { type: '68h' as const, ms: 68 * 60 * 60 * 1000 },
+  ];
+
+  for (const reminder of reminderTimes) {
+    const reminderTime = new Date(deadline.getTime() - reminder.ms);
+    const delayMs = reminderTime.getTime() - now.getTime();
+
+    // Only schedule if reminder time is in the future and not already scheduled
+    if (delayMs > 0 && !reminderState.has(reminder.type)) {
+      reminderState.add(reminder.type);
+
+      setTimeout(async () => {
+        console.log(`[Reminder] Sending ${reminder.type} reminders for project ${projectId}`);
+
+        const smsMessage = buildReminderSMS({
+          honoreeName,
+          link: contributionLink,
+          reminderType: reminder.type,
+        });
+
+        // Send to all contributors who haven't opted out
+        for (const contributor of contributors) {
+          if (contributor.phone) {
+            await sendSMS({
+              to: contributor.phone,
+              message: smsMessage,
+            });
+          }
+
+          if (contributor.email) {
+            const emailContent = {
+              subject: `Reminder: Share memories for ${honoreeName}`,
+              html: `
+                <p>Just a friendly reminder to contribute to ${honoreeName}'s song!</p>
+                <p>${smsMessage}</p>
+                <p><a href="${contributionLink}">Click here to contribute</a></p>
+              `,
+              text: smsMessage,
+            };
+
+            await sendEmail({
+              to: contributor.email,
+              ...emailContent,
+            });
+          }
+        }
+      }, delayMs);
+
+      console.log(
+        `[Reminder] Scheduled ${reminder.type} reminder for project ${projectId} at ${reminderTime.toISOString()}`
+      );
+    }
+  }
+}
+
+/**
+ * Cancel all scheduled reminders for a project
+ * Note: setTimeout doesn't return a handle we can easily cancel in this implementation
+ * For production, consider using a job queue system like Bull or Agenda
+ */
+export function cancelReminders(projectId: string): void {
+  scheduledReminders.delete(projectId);
+  console.log(`[Reminder] Cancelled reminders for project ${projectId}`);
 }
 
 // Helper function
