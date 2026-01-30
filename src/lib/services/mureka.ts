@@ -231,7 +231,7 @@ export function buildStylePrompt(params: {
   }
 
   // Mureka supports longer prompts
-  let prompt = parts.join(', ');
+  const prompt = parts.join(', ');
 
   return prompt;
 }
