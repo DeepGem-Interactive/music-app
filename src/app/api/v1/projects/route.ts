@@ -150,13 +150,20 @@ export async function POST(request: NextRequest) {
         // TODO: Send invitation emails/SMS
         // This will be implemented in Feature #6 (Real Email/SMS Implementation)
         console.log(`Created ${invites?.length || 0} invites for project ${project.id}`);
-        
+
         // Update project status to 'collecting' if we have invites
         if (!isInstant && invites && invites.length > 0) {
-          await supabase
+          const { data: updatedProject } = await supabase
             .from('projects')
             .update({ status: 'collecting' })
-            .eq('id', project.id);
+            .eq('id', project.id)
+            .select()
+            .single();
+
+          // Return updated project with correct status
+          if (updatedProject) {
+            return NextResponse.json(updatedProject, { status: 201 });
+          }
         }
       }
     }

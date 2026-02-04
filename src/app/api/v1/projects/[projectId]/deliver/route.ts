@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { sendEmail, buildCompletionEmail } from '@/lib/services/notifications';
+import { z } from 'zod';
 
 export async function POST(
   request: NextRequest,
@@ -61,13 +62,27 @@ export async function POST(
       );
     }
 
-    // Get recipient email from request body (optional - defaults to host)
+    // Validate request body
+    const deliverySchema = z.object({
+      recipient_email: z.string().email().optional(),
+    });
+
     const body = await request.json().catch(() => ({}));
-    const recipientEmail = body.recipient_email || user.email;
+    const validation = deliverySchema.safeParse(body);
+
+    if (!validation.success) {
+      return NextResponse.json(
+        { error: 'Invalid email format' },
+        { status: 400 }
+      );
+    }
+
+    // Only allow sending to the project host's own email for security
+    const recipientEmail = user.email;
 
     if (!recipientEmail) {
       return NextResponse.json(
-        { error: 'No recipient email provided' },
+        { error: 'No email address found for user' },
         { status: 400 }
       );
     }
@@ -117,7 +132,7 @@ export async function POST(
           });
           contributorEmails.push(invite.recipient_contact);
         } catch (err) {
-          console.error(`Failed to send email to ${invite.recipient_contact}:`, err);
+          console.error('Failed to send contributor email:', { projectId, error: err instanceof Error ? err.message : 'Unknown error' });
           // Continue sending to other recipients
         }
       }
@@ -128,9 +143,8 @@ export async function POST(
       message: 'Song delivered successfully',
       sent_to: {
         host: recipientEmail,
-        contributors: contributorEmails,
+        contributors: contributorEmails.length,
       },
-      download_url: downloadUrl,
     });
   } catch (error) {
     console.error('Error delivering song:', error);
