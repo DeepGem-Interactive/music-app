@@ -11,6 +11,7 @@ interface SubmissionCardProps {
   onApprove: () => void;
   onExclude: () => void;
   readOnly?: boolean;
+  loading?: boolean;
 }
 
 export function SubmissionCard({
@@ -18,6 +19,7 @@ export function SubmissionCard({
   onApprove,
   onExclude,
   readOnly = false,
+  loading = false,
 }: SubmissionCardProps) {
   const [expanded, setExpanded] = useState(false);
 
@@ -99,6 +101,7 @@ export function SubmissionCard({
               <div className="flex gap-2 pt-4 border-t border-gray-100">
                 <Button
                   size="sm"
+                  loading={loading}
                   onClick={(e) => {
                     e.stopPropagation();
                     onApprove();
@@ -111,6 +114,7 @@ export function SubmissionCard({
                 <Button
                   size="sm"
                   variant="outline"
+                  loading={loading}
                   onClick={(e) => {
                     e.stopPropagation();
                     onExclude();

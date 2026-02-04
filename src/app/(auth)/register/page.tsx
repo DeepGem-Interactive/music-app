@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
+import { ErrorAlert } from '@/components/ui/error-alert';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -94,11 +95,7 @@ export default function RegisterPage() {
 
         <Card>
           <form onSubmit={handleRegister} className="space-y-6">
-            {error && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-                {error}
-              </div>
-            )}
+            {error && <ErrorAlert message={error} />}
 
             <Input
               label="Full name"

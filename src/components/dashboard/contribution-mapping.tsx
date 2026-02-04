@@ -189,12 +189,14 @@ function mapContributionsToSection(
 
     // Check if any answer content appears in the section
     for (const answerText of answerTexts) {
-      if (!answerText || answerText.length < 10) continue;
+      // Skip very short answers (less than 2 words)
+      const words = answerText.toLowerCase().split(/\s+/).filter(w => w.length > 0);
+      if (words.length < 2) continue;
 
-      // Extract key phrases (3+ word sequences)
-      const words = answerText.toLowerCase().split(/\s+/);
-      for (let i = 0; i <= words.length - 3; i++) {
-        const phrase = words.slice(i, i + 3).join(' ');
+      // Extract key phrases (use 2-3 word sequences based on availability)
+      const phraseLength = Math.min(3, words.length);
+      for (let i = 0; i <= words.length - phraseLength; i++) {
+        const phrase = words.slice(i, i + phraseLength).join(' ');
         if (sectionLowerCase.includes(phrase)) {
           contributorNames.add(submission.contributor_name);
           // Find the sentence containing this phrase

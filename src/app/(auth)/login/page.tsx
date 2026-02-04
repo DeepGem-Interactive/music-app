@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
+import { ErrorAlert } from '@/components/ui/error-alert';
 
 function LoginForm() {
   const router = useRouter();
@@ -42,11 +43,7 @@ function LoginForm() {
   return (
     <Card>
       <form onSubmit={handleLogin} className="space-y-6">
-        {error && (
-          <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-            {error}
-          </div>
-        )}
+        {error && <ErrorAlert message={error} />}
 
         <Input
           label="Email address"
@@ -78,7 +75,32 @@ function LoginForm() {
         </Button>
       </form>
 
-      <div className="mt-6 text-center text-sm text-gray-600">
+      <div className="mt-4 text-center">
+        <button
+          type="button"
+          onClick={async () => {
+            if (!email) {
+              setError('Enter your email address, then click Forgot password');
+              return;
+            }
+            const supabase = createClient();
+            const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+              redirectTo: `${window.location.origin}/auth/callback`,
+            });
+            if (resetError) {
+              setError(resetError.message);
+            } else {
+              setError('');
+              alert('Check your email for a password reset link.');
+            }
+          }}
+          className="text-sm text-indigo-600 hover:text-indigo-500 font-medium"
+        >
+          Forgot password?
+        </button>
+      </div>
+
+      <div className="mt-4 text-center text-sm text-gray-600">
         Don&apos;t have an account?{' '}
         <Link href="/register" className="text-indigo-600 hover:text-indigo-500 font-medium">
           Sign up
