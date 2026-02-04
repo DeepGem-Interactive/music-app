@@ -1,9 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { Play, Download, RefreshCw, Music } from 'lucide-react';
+import { Play, Download, RefreshCw, Music, Pencil, Check } from 'lucide-react';
 import { Card, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { ErrorAlert } from '@/components/ui/error-alert';
 import type { SongVersion } from '@/types';
 
 interface GenerationPanelProps {
@@ -26,6 +28,8 @@ export function GenerationPanel({
   isInstant = false,
 }: GenerationPanelProps) {
   const [generating, setGenerating] = useState(false);
+  const [distributing, setDistributing] = useState(false);
+  const [distributed, setDistributed] = useState(false);
   const [feedback, setFeedback] = useState('');
   const [error, setError] = useState('');
 
@@ -43,7 +47,7 @@ export function GenerationPanel({
       });
 
       if (!response.ok) {
-        const data = await response.json();
+        const data = await response.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to generate song');
       }
 
@@ -58,18 +62,29 @@ export function GenerationPanel({
 
   const handleDistribute = async () => {
     if (!latestVersion) return;
+    setError('');
+    setDistributing(true);
 
     try {
-      await fetch(`/api/v1/projects/${projectId}/distribute`, {
+      const response = await fetch(`/api/v1/projects/${projectId}/distribute`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           version_id: latestVersion.id,
         }),
       });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to distribute song');
+      }
+
+      setDistributed(true);
       onGenerate();
     } catch (err) {
-      console.error('Distribution failed:', err);
+      setError(err instanceof Error ? err.message : 'Distribution failed');
+    } finally {
+      setDistributing(false);
     }
   };
 
@@ -86,11 +101,7 @@ export function GenerationPanel({
         }
       />
 
-      {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-          {error}
-        </div>
-      )}
+      {error && <ErrorAlert message={error} className="mb-4" />}
 
       {latestVersion && latestVersion.status === 'completed' ? (
         <div className="space-y-4">
@@ -144,45 +155,60 @@ export function GenerationPanel({
             {status !== 'completed' && (
               <Button
                 onClick={handleDistribute}
+                loading={distributing}
+                disabled={distributed}
                 className="w-full flex items-center gap-2"
               >
-                <Play className="w-4 h-4" />
-                Distribute to Spotify
+                {distributed ? (
+                  <>
+                    <Check className="w-4 h-4" />
+                    Distributed!
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-4 h-4" />
+                    Distribute to Spotify
+                  </>
+                )}
               </Button>
             )}
           </div>
 
-          {/* Iteration */}
+          {/* Edit Song */}
           {revisionsRemaining > 0 && status !== 'completed' && (
             <div className="pt-4 border-t border-gray-200">
-              <p className="text-sm text-gray-600 mb-3">
-                Want to make changes? ({revisionsRemaining} revision{revisionsRemaining !== 1 ? 's' : ''} remaining)
-              </p>
-              <div className="space-y-2">
-                {ITERATION_OPTIONS.map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => setFeedback(option.value)}
-                    className={`w-full text-left px-3 py-2 text-sm rounded-lg border transition-colors ${
-                      feedback === option.value
-                        ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
+              <div className="flex items-center gap-2 mb-2">
+                <Pencil className="w-4 h-4 text-gray-500" />
+                <p className="text-sm font-medium text-gray-700">
+                  Edit this song
+                </p>
               </div>
-              {feedback && (
+              <p className="text-xs text-gray-500 mb-3">
+                Tell us what you&apos;d like to change — be as specific or vague as you want and we&apos;ll take it from there.
+              </p>
+              <Textarea
+                value={feedback}
+                onChange={(e) => setFeedback(e.target.value)}
+                placeholder="e.g., Make the chorus catchier, add more about her garden, make it less cheesy..."
+                className="min-h-[80px] text-sm"
+                maxLength={500}
+                showCount
+              />
+              <div className="flex items-center justify-between mt-2">
+                <span className="text-xs text-gray-400">
+                  {revisionsRemaining} revision{revisionsRemaining !== 1 ? 's' : ''} remaining
+                </span>
                 <Button
                   onClick={handleGenerate}
                   loading={generating}
-                  className="w-full mt-3 flex items-center gap-2"
+                  disabled={!feedback.trim()}
+                  size="sm"
+                  className="flex items-center gap-2"
                 >
-                  <RefreshCw className="w-4 h-4" />
+                  <RefreshCw className="w-3.5 h-3.5" />
                   Regenerate
                 </Button>
-              )}
+              </div>
             </div>
           )}
         </div>
@@ -193,6 +219,25 @@ export function GenerationPanel({
           <p className="text-sm text-gray-500 mt-1">
             This may take a few minutes
           </p>
+        </div>
+      ) : latestVersion && latestVersion.status === 'failed' ? (
+        <div className="space-y-4">
+          <div className="p-4 bg-red-50 rounded-lg text-center">
+            <Music className="w-8 h-8 mx-auto mb-2 text-red-400" />
+            <p className="text-sm font-medium text-red-700">Song generation failed</p>
+            <p className="text-xs text-red-500 mt-1">
+              Something went wrong during generation. You can try again below.
+            </p>
+          </div>
+          {revisionsRemaining > 0 && (
+            <Button
+              onClick={handleGenerate}
+              loading={generating}
+              className="w-full"
+            >
+              Try Again
+            </Button>
+          )}
         </div>
       ) : (
         <div className="space-y-4">
@@ -229,13 +274,3 @@ export function GenerationPanel({
   );
 }
 
-const ITERATION_OPTIONS = [
-  { value: 'simpler_chorus', label: 'Make chorus simpler' },
-  { value: 'less_words', label: 'Less words, more space' },
-  { value: 'more_personal', label: 'More personal details' },
-  { value: 'more_instrumental', label: 'More instrumental sections' },
-  { value: 'more_upbeat', label: 'More upbeat energy' },
-  { value: 'more_emotional', label: 'More emotional / tearjerker' },
-  { value: 'fix_pronunciation', label: 'Fix confusing words' },
-  { value: 'shorten_verses', label: 'Shorten verses, repeat chorus' },
-];

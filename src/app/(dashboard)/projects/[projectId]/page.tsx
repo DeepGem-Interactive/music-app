@@ -9,6 +9,7 @@ import { InviteModal } from '@/components/dashboard/invite-modal';
 import { SubmissionCard } from '@/components/dashboard/submission-card';
 import { GenerationPanel } from '@/components/dashboard/generation-panel';
 import { Zap, Users } from 'lucide-react';
+import { ErrorAlert } from '@/components/ui/error-alert';
 import type { ProjectDashboard, Submission, CreationMode } from '@/types';
 
 interface ExtendedProjectDashboard extends ProjectDashboard {
@@ -26,6 +27,8 @@ export default function ProjectDetailPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [actionError, setActionError] = useState('');
+  const [pendingActions, setPendingActions] = useState<Set<string>>(new Set());
 
   const fetchDashboard = async () => {
     try {
@@ -55,29 +58,31 @@ export default function ProjectDetailPage({
     return () => clearInterval(interval);
   }, [resolvedParams.projectId]);
 
-  const handleApproveSubmission = async (submissionId: string) => {
-    try {
-      await fetch(`/api/v1/submissions/${submissionId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'approved' }),
-      });
-      fetchDashboard();
-    } catch (err) {
-      console.error('Failed to approve submission:', err);
-    }
-  };
+  const handleSubmissionAction = async (submissionId: string, newStatus: 'approved' | 'excluded') => {
+    setActionError('');
+    setPendingActions(prev => new Set(prev).add(submissionId));
 
-  const handleExcludeSubmission = async (submissionId: string) => {
     try {
-      await fetch(`/api/v1/submissions/${submissionId}`, {
+      const response = await fetch(`/api/v1/submissions/${submissionId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'excluded' }),
+        body: JSON.stringify({ status: newStatus }),
       });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || `Failed to ${newStatus === 'approved' ? 'approve' : 'exclude'} submission`);
+      }
+
       fetchDashboard();
     } catch (err) {
-      console.error('Failed to exclude submission:', err);
+      setActionError(err instanceof Error ? err.message : 'Action failed');
+    } finally {
+      setPendingActions(prev => {
+        const next = new Set(prev);
+        next.delete(submissionId);
+        return next;
+      });
     }
   };
 
@@ -93,7 +98,14 @@ export default function ProjectDetailPage({
     return (
       <Card className="text-center py-12">
         <p className="text-red-600 mb-4">{error}</p>
-        <Button onClick={() => router.push('/dashboard')}>Back to Dashboard</Button>
+        <div className="flex gap-3 justify-center">
+          <Button onClick={() => { setError(''); setLoading(true); fetchDashboard(); }}>
+            Try Again
+          </Button>
+          <Button variant="outline" onClick={() => router.push('/dashboard')}>
+            Back to Dashboard
+          </Button>
+        </div>
       </Card>
     );
   }
@@ -190,6 +202,7 @@ export default function ProjectDetailPage({
             title={isInstant ? 'Your Memories' : 'Submissions'}
             description={isInstant ? 'The memories that will be woven into your song' : 'Review and curate memories from contributors'}
           />
+          {actionError && <ErrorAlert message={actionError} className="mb-4" />}
           {submissions.length === 0 ? (
             <Card className="text-center py-8">
               <p className="text-gray-500 mb-4">
@@ -207,9 +220,10 @@ export default function ProjectDetailPage({
                 <SubmissionCard
                   key={submission.id}
                   submission={submission}
-                  onApprove={() => handleApproveSubmission(submission.id)}
-                  onExclude={() => handleExcludeSubmission(submission.id)}
+                  onApprove={() => handleSubmissionAction(submission.id, 'approved')}
+                  onExclude={() => handleSubmissionAction(submission.id, 'excluded')}
                   readOnly={isInstant}
+                  loading={pendingActions.has(submission.id)}
                 />
               ))}
             </div>

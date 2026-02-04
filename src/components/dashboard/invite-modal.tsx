@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { isValidEmail, isValidPhone } from '@/lib/utils';
+import { ErrorAlert } from '@/components/ui/error-alert';
 import type { InviteChannel } from '@/types';
 
 interface Contact {
@@ -100,7 +101,7 @@ export function InviteModal({
       });
 
       if (!response.ok) {
-        const data = await response.json();
+        const data = await response.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to send invites');
       }
 
@@ -176,17 +177,31 @@ export function InviteModal({
                 </div>
               </div>
             ))}
+            {results.some(r => !r.success) && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  // Pre-populate with failed contacts for retry
+                  const failedContacts = results
+                    .filter(r => !r.success && r.contact)
+                    .map(r => r.contact as Contact);
+                  if (failedContacts.length > 0) {
+                    setContacts(failedContacts);
+                  }
+                  setResults(null);
+                }}
+                className="w-full mb-2"
+              >
+                Retry Failed ({results.filter(r => !r.success).length})
+              </Button>
+            )}
             <Button onClick={handleClose} className="w-full">
               Done
             </Button>
           </div>
         ) : (
           <>
-            {error && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-                {error}
-              </div>
-            )}
+            {error && <ErrorAlert message={error} className="mb-4" />}
 
             <p className="text-gray-600 mb-4">
               Enter the contact information for people you&apos;d like to contribute

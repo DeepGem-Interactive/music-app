@@ -10,6 +10,7 @@ import { Slider } from '@/components/ui/slider';
 import { Select } from '@/components/ui/select';
 import { TagInput } from '@/components/ui/tag-input';
 import { ProgressSteps } from '@/components/ui/progress-steps';
+import { ErrorAlert } from '@/components/ui/error-alert';
 import { Clock, Users, Zap, Plus, Trash2 } from 'lucide-react';
 import {
   TEMPO_OPTIONS,
@@ -45,6 +46,7 @@ export default function NewProjectPage() {
     occasion: '',
     personality_traits: [],
     favorite_moments: '',
+    honoree_description: '',
     tone_heartfelt_funny: 5,
     tone_intimate_anthem: 5,
     tone_minimal_lyrical: 5,
@@ -105,7 +107,7 @@ export default function NewProjectPage() {
       });
 
       if (!response.ok) {
-        const data = await response.json();
+        const data = await response.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to create project');
       }
 
@@ -197,11 +199,7 @@ export default function NewProjectPage() {
       </div>
 
       <Card className="p-8">
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-            {error}
-          </div>
-        )}
+        {error && <ErrorAlert message={error} className="mb-6" />}
 
         {renderStep()}
 
@@ -325,13 +323,13 @@ function DescribePersonStep({ formData, updateField }: StepProps) {
       />
 
       <Textarea
-        label="Favorite moments together (optional)"
-        value={formData.favorite_moments || ''}
-        onChange={(e) => updateField('favorite_moments', e.target.value)}
-        placeholder="Share your favorite memories or moments with this person..."
-        maxLength={1000}
+        label="Describe them (optional)"
+        value={formData.honoree_description || ''}
+        onChange={(e) => updateField('honoree_description', e.target.value)}
+        placeholder="e.g., Tall with curly silver hair, always wearing her reading glasses, warm smile that lights up a room..."
+        maxLength={500}
         showCount
-        rows={4}
+        rows={3}
       />
     </div>
   );
@@ -658,9 +656,14 @@ function MusicStep({ formData, updateField }: StepProps) {
 
       {/* Error Message */}
       {inferError && (
-        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-          {inferError}
-        </div>
+        <ErrorAlert
+          message={inferError}
+          onRetry={formData.music_input_mode === 'surprise'
+            ? () => inferStyle('surprise', '', formData.occasion)
+            : formData.music_style_references?.trim()
+              ? handleInferClick
+              : undefined}
+        />
       )}
 
       {/* Inferred Style Preview */}
@@ -847,6 +850,16 @@ function DetailsStep({ formData, updateField, isInstant }: StepProps & { isInsta
       <h2 className="text-lg font-semibold text-gray-900">
         Additional details
       </h2>
+
+      <Textarea
+        label="Favorite moments together (optional)"
+        value={formData.favorite_moments || ''}
+        onChange={(e) => updateField('favorite_moments', e.target.value)}
+        placeholder="Share your favorite memories or moments with this person..."
+        maxLength={1000}
+        showCount
+        rows={4}
+      />
 
       <TagInput
         label="Names, places, or things to include"

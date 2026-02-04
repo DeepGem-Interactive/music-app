@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useState, use } from 'react';
+import { useEffect, useState, useCallback, use } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Countdown } from '@/components/ui/countdown';
 import { ProgressSteps } from '@/components/ui/progress-steps';
+import { ErrorAlert } from '@/components/ui/error-alert';
 import {
   QUICK_MODE_QUESTIONS,
   DEEP_MODE_QUESTIONS,
@@ -31,6 +32,38 @@ export default function ContributePage({
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+
+  const draftKey = `contribution-draft-${resolvedParams.token}`;
+
+  // Restore draft from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(draftKey);
+      if (saved) {
+        const draft = JSON.parse(saved);
+        if (draft.name) setName(draft.name);
+        if (draft.mode) setMode(draft.mode);
+        if (draft.answers) setAnswers(draft.answers);
+        if (typeof draft.currentQuestion === 'number') setCurrentQuestion(draft.currentQuestion);
+      }
+    } catch {
+      // Ignore corrupted draft
+    }
+  }, [draftKey]);
+
+  // Auto-save draft to localStorage
+  const saveDraft = useCallback(() => {
+    if (submitted) return;
+    try {
+      localStorage.setItem(draftKey, JSON.stringify({ name, mode, answers, currentQuestion }));
+    } catch {
+      // Ignore storage full
+    }
+  }, [draftKey, name, mode, answers, currentQuestion, submitted]);
+
+  useEffect(() => {
+    saveDraft();
+  }, [saveDraft]);
 
   useEffect(() => {
     const fetchContext = async () => {
@@ -71,6 +104,7 @@ export default function ContributePage({
     if (!mode) return;
 
     setSubmitting(true);
+    setError('');
 
     try {
       const response = await fetch(`/api/v1/contributions/${resolvedParams.token}`, {
@@ -84,10 +118,12 @@ export default function ContributePage({
       });
 
       if (!response.ok) {
-        const data = await response.json();
+        const data = await response.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to submit');
       }
 
+      // Clear draft on success
+      try { localStorage.removeItem(draftKey); } catch {}
       setSubmitted(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
@@ -256,6 +292,15 @@ export default function ContributePage({
             showCount
             className="min-h-[150px]"
           />
+
+          {error && (
+            <ErrorAlert
+              message={error}
+              onRetry={handleSubmit}
+              retryLabel="Try submitting again"
+              className="mt-4"
+            />
+          )}
 
           <div className="flex justify-between mt-6 pt-6 border-t border-gray-200">
             <Button
