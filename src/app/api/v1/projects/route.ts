@@ -67,6 +67,7 @@ export async function POST(request: NextRequest) {
       honoree_details,
       personality_traits,
       favorite_moments,
+      honoree_description,
       ...projectData
     } = validation.data;
     const isInstant = creation_mode === 'instant';
@@ -90,6 +91,7 @@ export async function POST(request: NextRequest) {
       music_style_references: music_style_references || null,
       music_inferred_style: music_inferred_style || null,
       honoree_details: honoree_details || null,
+      honoree_description: honoree_description || null,
     };
 
     // Create the project

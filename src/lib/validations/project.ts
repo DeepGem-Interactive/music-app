@@ -50,6 +50,7 @@ const baseProjectSchema = z.object({
   occasion: z.string().min(1, 'Occasion is required').max(200),
   personality_traits: z.array(z.string()).default([]), // NEW: Personality traits
   favorite_moments: z.string().max(1000).optional(), // NEW: Favorite moments
+  honoree_description: z.string().max(500).optional(), // Physical/visual description
   tone_heartfelt_funny: z.number().min(1).max(10).default(5),
   tone_intimate_anthem: z.number().min(1).max(10).default(5),
   tone_minimal_lyrical: z.number().min(1).max(10).default(5),

@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { generateSong, buildStylePrompt, generateLyrics } from '@/lib/services/fal-music';
+import { z } from 'zod';
+
+const generateBodySchema = z.object({
+  iteration_feedback: z.string().max(500).optional(),
+});
 
 export async function POST(
   request: NextRequest,
@@ -68,9 +73,31 @@ export async function POST(
       .eq('project_id', projectId)
       .single();
 
-    // Parse iteration feedback from request body
-    const body = await request.json().catch(() => ({}));
-    const iterationFeedback = body.iteration_feedback;
+    // Parse and validate iteration feedback from request body
+    const rawBody = await request.json().catch(() => ({}));
+    const bodyResult = generateBodySchema.safeParse(rawBody);
+    if (!bodyResult.success) {
+      return NextResponse.json(
+        { error: 'Invalid request body', details: bodyResult.error.flatten() },
+        { status: 400 }
+      );
+    }
+    const iterationFeedback = bodyResult.data.iteration_feedback;
+
+    // Fetch previous lyrics if this is a revision
+    let previousLyrics: string | undefined;
+    if (iterationFeedback) {
+      const { data: prevVersion } = await supabase
+        .from('song_versions')
+        .select('lyrics')
+        .eq('project_id', projectId)
+        .order('version_number', { ascending: false })
+        .limit(1)
+        .single();
+      if (prevVersion?.lyrics) {
+        previousLyrics = prevVersion.lyrics;
+      }
+    }
 
     // Build style prompt with inferred style if available
     const stylePrompt = buildStylePrompt({
@@ -85,17 +112,25 @@ export async function POST(
       inferredStyle: project.music_inferred_style,
     });
 
-    // Generate lyrics
-    const lyrics = generateLyrics({
+    // Generate lyrics via AI (falls back to template if API unavailable)
+    const lyrics = await generateLyrics({
       honoreeName: project.honoree_name,
       occasion: project.occasion,
+      relationship: project.honoree_relationship,
+      honoreeDescription: project.honoree_description,
+      toneHeartfeltFunny: project.tone_heartfelt_funny,
+      toneIntimateAnthem: project.tone_intimate_anthem,
+      toneMinimalLyrical: project.tone_minimal_lyrical,
       submissions: (submissions || []).map(s => ({
         answers: s.answers_json as Record<string, string>,
-        mustIncludeLines: curation?.must_include_lines,
       })),
-      mustIncludeItems: project.must_include_items || [],
+      mustIncludeItems: [
+        ...(project.must_include_items || []),
+        ...(curation?.must_include_lines || []),
+      ],
       topicsToAvoid: project.topics_to_avoid || [],
-      toneMinimalLyrical: project.tone_minimal_lyrical,
+      previousLyrics,
+      iterationFeedback,
     });
 
     // Create song version record
@@ -124,11 +159,26 @@ export async function POST(
     }
 
     // Start generation job
-    const { jobId } = await generateSong({
-      stylePrompt,
-      lyrics,
-      instrumentalTags: project.music_instrumental_preferences,
-    });
+    let jobId: string;
+    try {
+      const result = await generateSong({
+        stylePrompt,
+        lyrics,
+        instrumentalTags: project.music_instrumental_preferences,
+      });
+      jobId = result.jobId;
+    } catch (genError) {
+      // Mark the song version as failed so the UI can show proper state
+      await supabase
+        .from('song_versions')
+        .update({ status: 'failed', generation_metadata: { error: String(genError) } })
+        .eq('id', songVersion.id);
+      console.error('Song generation failed:', genError);
+      return NextResponse.json(
+        { error: 'Song generation service unavailable. Please try again.' },
+        { status: 502 }
+      );
+    }
 
     // Update song version with job_id for status polling
     await supabase
